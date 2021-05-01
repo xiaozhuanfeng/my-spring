@@ -1,6 +1,7 @@
 package com.java.spring;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Map;
@@ -94,7 +95,7 @@ public class CustomizeApplicationContext {
             String beanName = entry.getKey();
             CustomizeBeanDefinition beanDefinition =  entry.getValue();
             if("singleton".equals(beanDefinition.getScope())){
-                Object beanObj = createBean(beanDefinition);
+                Object beanObj = createBean(beanName,beanDefinition);
                 singleTonMap.put(beanName,beanObj);
             }
         }
@@ -121,15 +122,50 @@ public class CustomizeApplicationContext {
 
     /**
      * 创基bean
-     * @param beanDefinition
+     * @param beanName
      * @return
      */
-    public Object createBean(CustomizeBeanDefinition beanDefinition){
+    public Object createBean(String beanName,CustomizeBeanDefinition beanDefinition){
         Class clazz = beanDefinition.getClazz();
         Object instance = null;
 
         try {
             instance = clazz.getDeclaredConstructor().newInstance();
+
+            //依赖注入，给属性赋值
+            //获取类中所有属性
+            Field[] filelds = clazz.getDeclaredFields();
+            for(Field f : filelds){
+                //如果有定义的注入注解
+                if(f.isAnnotationPresent(CustomizeAutowired.class)){
+                    //根据属性名去找
+                    String fBeanName = f.getName();
+
+                    Object fBean = getBean(fBeanName);
+                    CustomizeAutowired customizeAutowired = f.getDeclaredAnnotation(CustomizeAutowired.class);
+                    if(customizeAutowired.required() && null == fBean){
+                        //如果是必须
+                        throw new NullPointerException();
+                    }
+
+                    //由于属性为私有属性，需要通过反射方式赋值，故设置true
+                    f.setAccessible(true);
+                    //将对象赋值给属性
+                    f.set(instance,fBean);
+                }
+            }
+
+
+            //Aware 回调
+            if(instance instanceof IBeanNameAware){
+                ((IBeanNameAware) instance).setBeanName(beanName);
+            }
+
+            //初始化操作
+            if(instance instanceof IInitializingBean){
+                ((IInitializingBean) instance).afterPropertiesSet();
+            }
+
         } catch (InstantiationException e) {
             e.printStackTrace();
         } catch (IllegalAccessException e) {
@@ -137,6 +173,8 @@ public class CustomizeApplicationContext {
         } catch (InvocationTargetException e) {
             e.printStackTrace();
         } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
             e.printStackTrace();
         }
         return instance;
@@ -157,7 +195,7 @@ public class CustomizeApplicationContext {
                 return singleTonMap.get(name);
             }else{
                 //原型模式，创建bean对象
-                return createBean(beanDefinition);
+                return createBean(name,beanDefinition);
             }
         }else{
             //不存在bean，可自定义异常
