@@ -4,6 +4,8 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,6 +26,8 @@ public class CustomizeApplicationContext {
      * bean定义Map
      */
     private ConcurrentHashMap<String,CustomizeBeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
+
+    private List<IBeanPostProcessor> beanPostProcessorList = new ArrayList();
 
     public CustomizeApplicationContext(Class customizeConfig) {
         this.customizeConfig = customizeConfig;
@@ -61,6 +65,19 @@ public class CustomizeApplicationContext {
                         Class<?> aClass = classLoader.loadClass(subFilePath(f.getPath()));
 
                         if(aClass.isAnnotationPresent(CustomizeComponent.class)){
+
+
+                            //模拟Spring  BeanPostProcessor实现
+                            if(IBeanPostProcessor.class.isAssignableFrom(aClass)){
+                                //注意：判断类是否实现了 IBeanPostProcessor 接口
+                                //注意：spring 源码不是下面实现
+                                IBeanPostProcessor instance = (IBeanPostProcessor) aClass.getDeclaredConstructor().newInstance();
+
+                                //存放起来，方便初始化前后做操作
+                                beanPostProcessorList.add(instance);
+                            }
+
+
                             //如果是自定义的注解,做自己想做的
                             CustomizeComponent ccp = aClass.getDeclaredAnnotation(CustomizeComponent.class);
                             String beanName =  ccp.value();
@@ -80,6 +97,14 @@ public class CustomizeApplicationContext {
                         }
 
                     } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    } catch (InstantiationException e) {
+                        e.printStackTrace();
+                    } catch (NoSuchMethodException e) {
+                        e.printStackTrace();
+                    } catch (InvocationTargetException e) {
                         e.printStackTrace();
                     }
                 }
@@ -161,9 +186,20 @@ public class CustomizeApplicationContext {
                 ((IBeanNameAware) instance).setBeanName(beanName);
             }
 
+            //模拟Spring BeanPostProcessor初始化前操作
+            for(IBeanPostProcessor beanPostProcessor : beanPostProcessorList){
+                beanPostProcessor.postProcessBeforeInitialization(instance,beanName);
+            }
+
+
             //初始化操作
             if(instance instanceof IInitializingBean){
                 ((IInitializingBean) instance).afterPropertiesSet();
+            }
+
+            //模拟Spring BeanPostProcessor初始后前操作,是创建对象的最后一步
+            for(IBeanPostProcessor beanPostProcessor : beanPostProcessorList){
+                beanPostProcessor.postProcessAfterInitialization(instance,beanName);
             }
 
         } catch (InstantiationException e) {

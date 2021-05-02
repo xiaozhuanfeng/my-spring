@@ -16,6 +16,13 @@ public class MyTest {
             Field[] filelds = clazz.getDeclaredFields();
 
             System.out.println(filelds);
+
+
+            if(IBeanNameAware.class.isAssignableFrom(clazz)){
+                //判断类是否实现了 IBeanNameAware 接口
+                System.out.println("...............");
+            }
+
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
